@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b3d2e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>LH Captura</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>LH Captura</h1>
+      <p class="sub">Grabación · transcripción · nube</p>
+    </header>
+    <section class="card">
+      <label class="check">
+        <input type="checkbox" id="consent" />
+        Confirmo aviso de consentimiento a participantes / grabación autorizada
+      </label>
+      <label>Proyecto / cliente
+        <input type="text" id="project" placeholder="Ej. junta interna LH" />
+      </label>
+      <label>Liga Zoom o Teams (opcional)
+        <input type="url" id="meetingUrl" placeholder="https://..." />
+      </label>
+      <p class="hint" id="modeBHint">
+        Unirse como bot a Zoom/Teams requiere apps del tenant (aún no configuradas).
+        Para mañana: abre la junta y graba con el micrófono desde aquí.
+      </p>
+      <div class="row">
+        <button type="button" class="secondary" id="openMeeting" disabled>Abrir junta</button>
+      </div>
+      <label>Participantes (opcional, separados por coma)
+        <input type="text" id="participants" placeholder="Miguel, Laura, ..." />
+      </label>
+    </section>
+    <section class="card center">
+      <div id="timer" class="timer">00:00</div>
+      <div id="status" class="status">Listo</div>
+      <button type="button" id="recBtn" class="rec" disabled>Iniciar</button>
+      <p class="hint">Usa Chrome en Android o Safari en iPhone/iPad. Permite el micrófono cuando lo pida.</p>
+    </section>
+    <section class="card">
+      <h2>Transcripción</h2>
+      <pre id="transcript" class="transcript">—</pre>
+    </section>
+    <section class="card" id="result" hidden>
+      <h2>Entrega</h2>
+      <pre id="delivery" class="transcript"></pre>
+      <a id="retrieveLink" href="#" target="_blank" rel="noopener">Abrir sesión en la nube</a>
+      <button type="button" class="secondary" id="downloadLocal">Descargar paquete local</button>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
