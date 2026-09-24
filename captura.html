@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b3d2e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>LH Captura</title>
+  <style>
+:root {
+  --bg: #0a1f18;
+  --card: #123528;
+  --accent: #1db954;
+  --danger: #e74c3c;
+  --text: #f2f7f4;
+  --muted: #9bb5a8;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: radial-gradient(1200px 600px at 50% -10%, #1a4d3a, var(--bg));
+  color: var(--text);
+  min-height: 100vh;
+}
+.wrap { max-width: 560px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+header h1 { margin: 0; font-size: 1.6rem; }
+.sub { color: var(--muted); margin: 0.25rem 0 1rem; }
+.card {
+  background: var(--card);
+  border: 1px solid #1f4f3c;
+  border-radius: 16px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.center { text-align: center; }
+label { display: block; font-size: 0.9rem; margin: 0.6rem 0; color: var(--muted); }
+input[type=text], input[type=url] {
+  width: 100%; margin-top: 0.35rem; padding: 0.7rem 0.8rem;
+  border-radius: 10px; border: 1px solid #2a5c47; background: #0d241c; color: var(--text);
+}
+.check { display: flex; gap: 0.6rem; align-items: flex-start; color: var(--text); }
+.hint { font-size: 0.8rem; color: var(--muted); line-height: 1.35; }
+.timer { font-size: 2.4rem; font-variant-numeric: tabular-nums; letter-spacing: 0.05em; }
+.status { color: var(--muted); margin: 0.4rem 0 1rem; }
+.rec {
+  width: 160px; height: 160px; border-radius: 50%;
+  border: 0; background: var(--accent); color: #052015;
+  font-size: 1.25rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 10px 30px rgba(29,185,84,0.35);
+}
+.rec.recording { background: var(--danger); color: #fff; animation: pulse 1.4s infinite; }
+.rec:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+@keyframes pulse { 50% { transform: scale(1.04); } }
+.secondary {
+  background: transparent; color: var(--text); border: 1px solid #2a5c47;
+  border-radius: 10px; padding: 0.55rem 0.9rem; cursor: pointer;
+}
+.row { margin: 0.5rem 0; }
+.transcript {
+  white-space: pre-wrap; word-break: break-word; background: #0d241c;
+  border-radius: 10px; padding: 0.8rem; max-height: 280px; overflow: auto;
+  font-size: 0.85rem; color: #d7ebe1;
+}
+a { color: var(--accent); }
+h2 { margin: 0 0 0.6rem; font-size: 1.05rem; }
+
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>LH Captura</h1>
+      <p class="sub">Grabación · transcripción · respaldo</p>
+    </header>
+    <section class="card">
+      <label class="check">
+        <input type="checkbox" id="consent" />
+        Confirmo aviso de consentimiento a participantes / grabación autorizada
+      </label>
+      <label>Proyecto / cliente
+        <input type="text" id="project" placeholder="Ej. junta interna LH" />
+      </label>
+      <label>Liga Zoom o Teams (opcional)
+        <input type="url" id="meetingUrl" placeholder="https://..." />
+      </label>
+      <p class="hint" id="modeBHint">
+        Unirse como bot a Zoom/Teams requiere apps del tenant (aún no configuradas).
+        Para la junta: abre la liga y graba con el micrófono desde aquí. Si falla la nube, descarga el paquete local.
+      </p>
+      <div class="row">
+        <button type="button" class="secondary" id="openMeeting" disabled>Abrir junta</button>
+      </div>
+      <label>Participantes (opcional, separados por coma)
+        <input type="text" id="participants" placeholder="Miguel, Laura, ..." />
+      </label>
+    </section>
+    <section class="card center">
+      <div id="timer" class="timer">00:00</div>
+      <div id="status" class="status">Listo</div>
+      <button type="button" id="recBtn" class="rec" disabled>Iniciar</button>
+      <p class="hint">Usa Chrome en Android o Safari en iPhone/iPad. Permite el micrófono cuando lo pida.</p>
+    </section>
+    <section class="card">
+      <h2>Transcripción</h2>
+      <pre id="transcript" class="transcript">—</pre>
+    </section>
+    <section class="card" id="result" hidden>
+      <h2>Entrega</h2>
+      <pre id="delivery" class="transcript"></pre>
+      <a id="retrieveLink" href="#" target="_blank" rel="noopener">Abrir sesión en la nube</a>
+      <button type="button" class="secondary" id="downloadLocal">Descargar paquete local</button>
+    </section>
+  </main>
+  <script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const consent = $("consent");
+  const recBtn = $("recBtn");
+  const openMeeting = $("openMeeting");
+  const timerEl = $("timer");
+  const statusEl = $("status");
+  const transcriptEl = $("transcript");
+  const result = $("result");
+  const deliveryEl = $("delivery");
+  const retrieveLink = $("retrieveLink");
+  const downloadLocal = $("downloadLocal");
+
+  let mediaRecorder = null;
+  let chunks = [];
+  let stream = null;
+  let startedAt = null;
+  let timerIv = null;
+  let recognition = null;
+  let transcriptParts = [];
+  let lastBlob = null;
+  let lastMeta = null;
+  let sessionId = null;
+
+  function uuid() {
+    return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+  }
+
+  function fmt(ms) {
+    const s = Math.floor(ms / 1000);
+    const m = String(Math.floor(s / 60)).padStart(2, "0");
+    const r = String(s % 60).padStart(2, "0");
+    return m + ":" + r;
+  }
+
+  function syncEnabled() {
+    recBtn.disabled = !consent.checked;
+    const url = $("meetingUrl").value.trim();
+    openMeeting.disabled = !url;
+  }
+  consent.addEventListener("change", syncEnabled);
+  $("meetingUrl").addEventListener("input", syncEnabled);
+
+  openMeeting.addEventListener("click", () => {
+    const url = $("meetingUrl").value.trim();
+    if (!url) return;
+    window.open(url, "_blank", "noopener");
+    statusEl.textContent = "Junta abierta. Pulsa Iniciar para grabar el micrófono.";
+  });
+
+  function startSpeech() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    transcriptParts = [];
+    if (!SR) {
+      transcriptEl.textContent = "(Web Speech no disponible en este navegador — el audio se guardará igual)";
+      return;
+    }
+    recognition = new SR();
+    recognition.lang = "es-MX";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (ev) => {
+      let interim = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) transcriptParts.push(t.trim());
+        else interim += t;
+      }
+      transcriptEl.textContent = (transcriptParts.join(" ") + " " + interim).trim() || "—";
+    };
+    recognition.onerror = () => {};
+    try { recognition.start(); } catch (_) {}
+  }
+
+  function stopSpeech() {
+    if (recognition) {
+      try { recognition.stop(); } catch (_) {}
+      recognition = null;
+    }
+  }
+
+  async function startRec() {
+    sessionId = uuid();
+    chunks = [];
+    startedAt = Date.now();
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "";
+    mediaRecorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    mediaRecorder.onstop = onStop;
+    mediaRecorder.start(1000);
+    startSpeech();
+    recBtn.textContent = "Detener";
+    recBtn.classList.add("recording");
+    statusEl.textContent = "Grabando…";
+    timerIv = setInterval(() => { timerEl.textContent = fmt(Date.now() - startedAt); }, 250);
+  }
+
+  function stopRec() {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+    stopSpeech();
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    clearInterval(timerIv);
+    recBtn.textContent = "Iniciar";
+    recBtn.classList.remove("recording");
+    statusEl.textContent = "Procesando y subiendo a la nube…";
+  }
+
+  async function onStop() {
+    const mime = (chunks[0] && chunks[0].type) || "audio/webm";
+    lastBlob = new Blob(chunks, { type: mime });
+    const duration_ms = Date.now() - startedAt;
+    const transcript = transcriptParts.join(" ").trim();
+    const participants = $("participants").value.split(",").map((s) => s.trim()).filter(Boolean);
+    lastMeta = {
+      session_id: sessionId,
+      product: "LH Captura",
+      version: "0.3-mvp",
+      project_tag: $("project").value.trim() || null,
+      meeting_url: $("meetingUrl").value.trim() || null,
+      mode: $("meetingUrl").value.trim() ? "A_mic_with_meeting_link" : "A_mic",
+      mode_b_bot_join: false,
+      mode_b_note: "Auto-join Zoom/Teams requiere SDK/tenant; no activo en este MVP.",
+      consent: true,
+      started_at: new Date(startedAt).toISOString(),
+      ended_at: new Date().toISOString(),
+      duration_ms,
+      duration_human: fmt(duration_ms),
+      participants,
+      transcript_raw: transcript,
+      transcript_status: transcript ? "ok_web_speech" : "pending_manual",
+      timestamps: [{ t0_ms: 0, t1_ms: duration_ms, label: "session" }],
+      device: { ua: navigator.userAgent, lang: navigator.language },
+      cloud: "netlify_blobs",
+    };
+
+    try {
+      const fd = new FormData();
+      fd.append("session_id", sessionId);
+      fd.append("metadata", JSON.stringify(lastMeta));
+      fd.append("audio", lastBlob, sessionId + (mime.includes("mp4") ? ".mp4" : ".webm"));
+      const res = await fetch("/api/session-upload", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "upload failed");
+      lastMeta.retrieve_url = json.retrieve_url;
+      statusEl.textContent = "Guardado en la nube";
+      showResult(json.retrieve_url);
+      await idbSave(null);
+    } catch (e) {
+      statusEl.textContent = "Sin red o error de subida — paquete en cola local";
+      await idbSave({ meta: lastMeta, audio: lastBlob });
+      showResult(null);
+      retryUpload();
+    }
+  }
+
+  function showResult(url) {
+    result.hidden = false;
+    deliveryEl.textContent = JSON.stringify(lastMeta, null, 2);
+    if (url) {
+      retrieveLink.href = url;
+      retrieveLink.style.display = "";
+      retrieveLink.textContent = "Abrir sesión en la nube";
+    } else {
+      retrieveLink.style.display = "none";
+    }
+  }
+
+  downloadLocal.addEventListener("click", async () => {
+    if (!lastMeta || !lastBlob) return;
+    const metaBlob = new Blob([JSON.stringify(lastMeta, null, 2)], { type: "application/json" });
+    const a1 = document.createElement("a");
+    a1.href = URL.createObjectURL(metaBlob);
+    a1.download = (sessionId || "session") + "-delivery.json";
+    a1.click();
+    const a2 = document.createElement("a");
+    a2.href = URL.createObjectURL(lastBlob);
+    a2.download = (sessionId || "session") + "-audio.webm";
+    a2.click();
+  });
+
+  recBtn.addEventListener("click", async () => {
+    if (recBtn.classList.contains("recording")) {
+      stopRec();
+      return;
+    }
+    try {
+      await startRec();
+    } catch (e) {
+      statusEl.textContent = "No se pudo abrir el micrófono: " + e.message;
+    }
+  });
+
+  // IndexedDB queue
+  function idb() {
+    return new Promise((resolve, reject) => {
+      const r = indexedDB.open("lh-captura", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("queue");
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function idbSave(item) {
+    const db = await idb();
+    await new Promise((res, rej) => {
+      const tx = db.transaction("queue", "readwrite");
+      if (item) tx.objectStore("queue").put(item, "pending");
+      else tx.objectStore("queue").delete("pending");
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+  async function retryUpload() {
+    try {
+      const db = await idb();
+      const item = await new Promise((res) => {
+        const tx = db.transaction("queue", "readonly");
+        const g = tx.objectStore("queue").get("pending");
+        g.onsuccess = () => res(g.result);
+        g.onerror = () => res(null);
+      });
+      if (!item) return;
+      const fd = new FormData();
+      fd.append("session_id", item.meta.session_id);
+      fd.append("metadata", JSON.stringify(item.meta));
+      fd.append("audio", item.audio, item.meta.session_id + ".webm");
+      const r = await fetch("/api/session-upload", { method: "POST", body: fd });
+      const j = await r.json();
+      if (r.ok && j.ok) {
+        await idbSave(null);
+        lastMeta = item.meta;
+        lastMeta.retrieve_url = j.retrieve_url;
+        statusEl.textContent = "Cola local subida a la nube";
+        showResult(j.retrieve_url);
+      }
+    } catch (_) {}
+  }
+  setInterval(retryUpload, 15000);
+  retryUpload();
+  syncEnabled();
+})();
+
+  </script>
+</body>
+</html>
