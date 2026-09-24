@@ -1,0 +1,16 @@
+{
+  "name": "LH Captura",
+  "short_name": "LH Captura",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0a1f18",
+  "theme_color": "#0b3d2e",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
