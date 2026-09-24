@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sesión LH Captura</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <h1>Sesión en la nube</h1>
+    <pre id="out" class="transcript">Cargando…</pre>
+    <audio id="player" controls style="width:100%;margin-top:1rem"></audio>
+  </main>
+  <script>
+    const id = new URLSearchParams(location.search).get('id');
+    const out = document.getElementById('out');
+    if (!id) { out.textContent = 'Falta id'; }
+    else {
+      fetch('/api/session?id=' + encodeURIComponent(id))
+        .then(r => r.json())
+        .then(j => {
+          out.textContent = JSON.stringify(j, null, 2);
+          document.getElementById('player').src = '/api/session?id=' + encodeURIComponent(id) + '&part=audio';
+        })
+        .catch(e => { out.textContent = String(e); });
+    }
+  </script>
+</body>
+</html>
